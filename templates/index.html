@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SmartPC Builder</title>
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css">
+    <style>
+        .price {
+            float: right;
+        }
+        #loading {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 1.5em;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1 class="mt-5">SmartPC Builder</h1>
+    <form id="pc-builder-form">
+        <div class="form-group">
+            <label for="budget">예산 (원):</label>
+            <input type="number" class="form-control" id="budget" placeholder="예산을 입력하세요">
+        </div>
+        <button type="submit" class="btn btn-primary">추천 받기</button>
+    </form>
+    <div id="loading">
+        <div class="spinner-border" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+        <p>예산에 맞는 부품 조합을 찾고 있습니다. 잠시만 기다려주세요...</p>
+    </div>
+    <div class="mt-5">
+        <h3>추천된 부품</h3>
+        <ul id="recommendation-list" class="list-group"></ul>
+        <h4 id="total-price" class="mt-3"></h4>
+        <button id="confirm-quote" class="btn btn-success mt-3" style="display: none;">견적 확정</button>
+    </div>
+</div>
+
+<script>
+document.getElementById('pc-builder-form').addEventListener('submit', function(event) {
+    event.preventDefault(); // 기본 제출 동작을 방지
+
+    const budget = document.getElementById('budget').value;
+
+    document.getElementById('loading').style.display = 'block'; // 로딩 표시
+    document.getElementById('recommendation-list').innerHTML = '';
+    document.getElementById('total-price').textContent = '';
+    document.getElementById('confirm-quote').style.display = 'none';
+
+    fetch('/recommend', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ budget: parseInt(budget) }), // 예산 데이터를 JSON 형태로 전송
+    })
+    .then(response => response.json())
+    .then(data => {
+        const recommendationList = document.getElementById('recommendation-list');
+        recommendationList.innerHTML = '';
+
+        if (data.error) {
+            const errorItem = document.createElement('li');
+            errorItem.className = 'list-group-item list-group-item-danger';
+            errorItem.textContent = `오류: ${data.error}`;
+            recommendationList.appendChild(errorItem);
+        } else {
+            for (const [key, value] of Object.entries(data)) {
+                if (key !== 'Total Price') {
+                    const listItem = document.createElement('li');
+                    listItem.className = 'list-group-item';
+                    listItem.innerHTML = `${key}: ${value.name} <span class="price">${value.price.toLocaleString()} 원</span>`;
+                    listItem.dataset.componentId = value.id;
+                    listItem.dataset.componentType = key;
+                    recommendationList.appendChild(listItem);
+                }
+            }
+
+            const totalPriceElement = document.getElementById('total-price');
+            totalPriceElement.textContent = `총 가격: ${data['Total Price'].toLocaleString()} 원`;
+
+            document.getElementById('confirm-quote').style.display = 'block'; // 견적 확정 버튼 표시
+        }
+        document.getElementById('loading').style.display = 'none'; // 로딩 표시 숨기기
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        document.getElementById('loading').style.display = 'none'; // 로딩 표시 숨기기
+    });
+});
+
+document.getElementById('confirm-quote').addEventListener('click', function() {
+    const recommendationList = document.getElementById('recommendation-list');
+    const components = {};
+    recommendationList.querySelectorAll('.list-group-item').forEach(item => {
+        const type = item.dataset.componentType;
+        const id = item.dataset.componentId;
+        components[type] = id;
+    });
+
+    fetch('/confirm', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(components), // 부품 조합 데이터를 JSON 형태로 전송
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.error) {
+            alert(`오류: ${data.error}`);
+        } else {
+            alert(`견적이 확정되었습니다! 견적 ID: ${data.quoteid}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+    });
+});
+</script>
+</body>
+</html>
